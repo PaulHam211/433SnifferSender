@@ -6,6 +6,16 @@ A comprehensive ESP32-based device for capturing, storing, and replaying 433MHz 
 ![Version](https://img.shields.io/badge/version-1.0.0-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
+## 📸 Screenshots
+
+### Desktop Interface
+![Desktop Screenshot](images/desktop-screenshot.png)
+*Full-featured web interface optimized for desktop browsers*
+
+### Mobile Interface  
+![Mobile Screenshot](images/mobile-screenshot.jpg)
+*Responsive mobile design with touch-friendly controls*
+
 ## ✨ Features
 
 ### 🎧 **Signal Capture & Storage**
@@ -33,6 +43,7 @@ A comprehensive ESP32-based device for capturing, storing, and replaying 433MHz 
 
 ### 📡 **Signal Transmission**
 - **One-click signal replay** from the web interface
+- **Multi-repeat transmission** with configurable repeat count (1-100 times)
 - **Protocol preservation** ensures accurate signal reproduction
 - **Real-time transmission feedback** with audio/visual confirmation
 
@@ -121,10 +132,11 @@ pio run --target uploadfs        # Upload web interface
 3. **Monitor Capture**: Signals appear in real-time with audio/visual feedback
 4. **Organize Signals**: Rename important captures and mark as favorites
 
-### **Managing Signals**
+### **Signal Management**
 - **Rename**: Click "Rename" to give signals meaningful names
 - **Favorite**: Star important signals to protect from auto-cleanup
 - **Transmit**: Click "Transmit" to replay any captured signal
+- **Repeat Transmit**: Use "Repeat" button to transmit signals multiple times
 - **Delete**: Remove unwanted signals individually
 - **Bulk Cleanup**: Use "Clean Old" or "Auto Clean" for maintenance
 
@@ -168,6 +180,7 @@ The device exposes a RESTful API for advanced integration:
 ### **Signal Management**
 - `GET /api/signals` - Retrieve all stored signals
 - `POST /api/transmit` - Transmit a specific signal by ID
+- `POST /api/repeat-transmit` - Repeat transmit a signal multiple times (1-100)
 - `DELETE /api/signals` - Delete a signal by ID
 - `POST /api/signals/rename` - Rename a signal
 - `POST /api/signals/favorite` - Toggle favorite status
