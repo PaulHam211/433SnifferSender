@@ -40,6 +40,14 @@ struct RFSignal {
   bool isFavorite;
 };
 
+// Repeat transmission variables (after struct definition)
+bool repeatTransmissionActive = false;
+int repeatCount = 0;
+int currentRepeatIndex = 0;
+RFSignal repeatSignal;
+unsigned long lastRepeatTime = 0;
+const unsigned long REPEAT_DELAY = 0; // No delay between transmissions
+
 // In-memory signal storage (will be persisted to preferences)
 std::vector<RFSignal> storedSignals;
 const int MAX_SIGNALS = 1000;  // Increased to 1000 signals
@@ -48,6 +56,7 @@ const int AUTO_CLEANUP_THRESHOLD = 950;  // Start cleanup when reaching 95% capa
 // Function declarations
 void handleReceivedSignal();
 void transmitSignal(const RFSignal& signal);
+void transmitSignal(const RFSignal& signal, bool withFeedback);
 bool isDuplicate(const RFSignal& newSignal);
 void performAutoCleanup();
 void playReceiveSound();
@@ -57,6 +66,8 @@ void flashLED(int duration, int times);
 void loadStoredSignals();
 void saveStoredSignals();
 void setupWebServer();
+void handleRepeatTransmission();
+void startRepeatTransmission(const RFSignal& signal, int count);
 
 void setup() {
   Serial.begin(115200);
@@ -116,6 +127,9 @@ void loop() {
   if (receiver.available() && sniffingEnabled) {
     handleReceivedSignal();
   }
+  
+  // Handle repeat transmission if active
+  handleRepeatTransmission();
   
   // Small delay to prevent watchdog issues
   delay(10);
@@ -179,6 +193,10 @@ void handleReceivedSignal() {
 }
 
 void transmitSignal(const RFSignal& signal) {
+  transmitSignal(signal, true); // Default with feedback
+}
+
+void transmitSignal(const RFSignal& signal, bool withFeedback) {
   Serial.print("Transmitting: ");
   Serial.print(signal.value);
   Serial.print(" / ");
@@ -190,20 +208,26 @@ void transmitSignal(const RFSignal& signal) {
   mySwitch.setProtocol(signal.protocol);
   mySwitch.send(signal.value, signal.bitLength);
   
-  // Provide feedback
-  if (buzzerEnabled) {
-    playTransmitSound();
-  }
-  if (ledEnabled) {
-    flashLED(200, 2);
+  // Provide feedback only if requested
+  if (withFeedback) {
+    if (buzzerEnabled) {
+      playTransmitSound();
+    }
+    if (ledEnabled) {
+      flashLED(200, 2);
+    }
   }
 }
 
 bool isDuplicate(const RFSignal& newSignal) {
-  for (const auto& signal : storedSignals) {
+  for (auto& signal : storedSignals) {
     if (signal.value == newSignal.value && 
         signal.bitLength == newSignal.bitLength &&
         signal.protocol == newSignal.protocol) {
+      // Update timestamp to show it was received again
+      signal.timestamp = newSignal.timestamp;
+      saveStoredSignals();  // Save the updated timestamp
+      Serial.println("Duplicate signal detected - timestamp updated");
       return true;
     }
   }
@@ -414,6 +438,27 @@ void setupWebServer() {
     }
   });
   
+  server.on("/api/repeat-transmit", HTTP_POST, [](AsyncWebServerRequest *request){
+    if (request->hasParam("id", true) && request->hasParam("count", true)) {
+      int id = request->getParam("id", true)->value().toInt();
+      int count = request->getParam("count", true)->value().toInt();
+      
+      if (id >= 0 && id < storedSignals.size() && count >= 1 && count <= 100) {
+        if (!repeatTransmissionActive) {
+          Serial.println("Starting repeat transmission: " + String(count) + " times");
+          startRepeatTransmission(storedSignals[id], count);
+          request->send(200, "text/plain", "Repeat transmission started for " + String(count) + " times");
+        } else {
+          request->send(400, "text/plain", "Repeat transmission already in progress");
+        }
+      } else {
+        request->send(400, "text/plain", "Invalid signal ID or count (1-100)");
+      }
+    } else {
+      request->send(400, "text/plain", "Missing signal ID or count");
+    }
+  });
+  
   server.on("/api/signals", HTTP_DELETE, [](AsyncWebServerRequest *request){
     if (request->hasParam("id", true)) {
       int id = request->getParam("id", true)->value().toInt();
@@ -498,4 +543,41 @@ void setupWebServer() {
     saveStoredSignals();
     request->send(200, "text/plain", "Removed " + String(removedCount) + " signals older than " + String(daysOld) + " days");
   });
+}
+
+// Non-blocking repeat transmission functions
+void startRepeatTransmission(const RFSignal& signal, int count) {
+  if (!repeatTransmissionActive) {
+    repeatTransmissionActive = true;
+    repeatCount = count;
+    currentRepeatIndex = 0;
+    repeatSignal = signal;
+    lastRepeatTime = millis();
+    
+    // Transmit the first signal immediately without feedback for speed
+    transmitSignal(repeatSignal, false);
+    currentRepeatIndex++;
+    Serial.println("Transmitted " + String(currentRepeatIndex) + "/" + String(repeatCount));
+  }
+}
+
+void handleRepeatTransmission() {
+  if (repeatTransmissionActive) {
+    // Since there's no delay, transmit all remaining signals immediately without feedback
+    while (currentRepeatIndex < repeatCount) {
+      transmitSignal(repeatSignal, false); // No audio/visual feedback for speed
+      currentRepeatIndex++;
+      Serial.println("Transmitted " + String(currentRepeatIndex) + "/" + String(repeatCount));
+    }
+    
+    // All transmissions complete - provide feedback only at the end
+    Serial.println("Repeat transmission completed: " + String(repeatCount) + " times");
+    if (buzzerEnabled) {
+      playTransmitSound();
+    }
+    if (ledEnabled) {
+      flashLED(200, 1);
+    }
+    repeatTransmissionActive = false;
+  }
 }

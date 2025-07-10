@@ -177,6 +177,34 @@
             transform: none;
         }
         
+        .repeat-input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .repeat-input label {
+            color: #2c3e50;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        
+        .repeat-input input {
+            padding: 8px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            width: 80px;
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        .repeat-input input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+        }
+        
         .signals-section {
             margin: 20px 10px;
         }
@@ -235,6 +263,26 @@
         .signal-card.favorite {
             border-left-color: #f39c12;
             background: linear-gradient(135deg, #fff9e6, #ffffff);
+        }
+        
+        .signal-card.duplicate-received {
+            animation: duplicateFlash 1s ease-in-out;
+        }
+        
+        @keyframes duplicateFlash {
+            0% { 
+                background: linear-gradient(135deg, #e8f5e8, #ffffff);
+                transform: scale(1);
+            }
+            50% { 
+                background: linear-gradient(135deg, #c8e6c9, #ffffff);
+                transform: scale(1.02);
+                box-shadow: 0 8px 25px rgba(76, 175, 80, 0.3);
+            }
+            100% { 
+                background: white;
+                transform: scale(1);
+            }
         }
         
         .signal-header {
@@ -391,7 +439,7 @@
             
             .btn-sm {
                 flex: 1;
-                min-width: 65px;
+                min-width: 60px;
                 padding: 8px 4px;
                 font-size: 10px;
                 white-space: nowrap;
@@ -458,7 +506,11 @@
                     <button class="btn btn-primary" id="toggle-buzzer">Toggle Buzzer</button>
                     <button class="btn btn-primary" id="toggle-led">Toggle LED</button>
                 </div>
-                <p><small>Control audio and visual feedback for signal activity</small></p>
+                <div class="repeat-input">
+                    <label for="repeat-count">Repeat Count:</label>
+                    <input type="number" id="repeat-count" min="1" max="100" value="10" class="repeat-input-field">
+                </div>
+                <p><small>Control audio/visual feedback and signal repeat count</small></p>
             </div>
             
             <div class="control-panel">
@@ -477,7 +529,7 @@
         
         <div class="signals-section">
             <div class="signals-header">
-                <h2>📡 Captured Signals</h2>
+                <h2>📡 Captured Signals123</h2>
                 <div class="filter-controls">
                     <button class="filter-btn active" data-filter="all">All</button>
                     <button class="filter-btn" data-filter="favorites">Favorites</button>
@@ -495,6 +547,8 @@
     <script>
         let currentFilter = 'all';
         let signals = [];
+        let lastSignalCount = 0;
+        let previousSignals = [];
         
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
@@ -558,11 +612,49 @@
             try {
                 const response = await fetch('/api/signals');
                 const data = await response.json();
-                signals = data.signals || [];
+                const newSignals = data.signals || [];
+                
+                // Check for signals with updated timestamps (duplicates)
+                if (signals.length > 0) {
+                    const updatedSignals = [];
+                    newSignals.forEach(newSignal => {
+                        const oldSignal = signals.find(s => s.id === newSignal.id);
+                        if (oldSignal && oldSignal.timestamp !== newSignal.timestamp) {
+                            updatedSignals.push(newSignal.id);
+                        }
+                    });
+                    
+                    // Also check for completely new signals
+                    const newSignalIds = newSignals.filter(ns => !signals.find(s => s.id === ns.id)).map(s => s.id);
+                    
+                    // Animate updated and new signals
+                    if (updatedSignals.length > 0 || newSignalIds.length > 0) {
+                        signals = newSignals;
+                        renderSignals();
+                        setTimeout(() => {
+                            [...updatedSignals, ...newSignalIds].forEach(id => {
+                                animateSignal(id);
+                            });
+                        }, 100);
+                        return;
+                    }
+                }
+                
+                signals = newSignals;
                 renderSignals();
             } catch (error) {
                 console.error('Failed to load signals:', error);
                 showNotification('Failed to load signals', 'error');
+            }
+        }
+        
+        function animateSignal(signalId) {
+            const signalCard = document.querySelector(`[data-signal-id="${signalId}"]`);
+            if (signalCard) {
+                signalCard.classList.add('duplicate-received');
+                setTimeout(() => {
+                    signalCard.classList.remove('duplicate-received');
+                }, 1000);
             }
         }
         
@@ -571,7 +663,7 @@
             let filteredSignals = signals;
             
             if (currentFilter === 'favorites') {
-                filteredSignals = signals.filter(s => s.isFavorite);
+                filteredSignals = signals.filter(s => s.isFavorite === true || s.isFavorite === 'true');
             } else if (currentFilter === 'recent') {
                 filteredSignals = signals.slice(-10).reverse();
             }
@@ -581,13 +673,20 @@
                 return;
             }
             
-            container.innerHTML = filteredSignals.map((signal, index) => `
-                <div class="signal-card ${signal.isFavorite ? 'favorite' : ''}">
+            // Debug logging
+            console.log('Rendering signals:', filteredSignals.map(s => ({id: s.id, name: s.name, isFavorite: s.isFavorite})));
+            
+            container.innerHTML = filteredSignals.map((signal, index) => {
+                // Ensure isFavorite is properly converted to boolean
+                const isFavorite = signal.isFavorite === true || signal.isFavorite === 'true';
+                return `
+                <div class="signal-card ${isFavorite ? 'favorite' : ''}" data-signal-id="${signal.id}">
                     <div class="signal-header">
                         <span class="signal-name">${signal.name}</span>
-                        <button class="signal-favorite ${signal.isFavorite ? 'active' : ''}" 
-                                onclick="toggleFavorite(${signal.id})">
-                            ${signal.isFavorite ? '⭐' : '☆'}
+                        <button class="signal-favorite ${isFavorite ? 'active' : ''}" 
+                                onclick="toggleFavorite(${signal.id})"
+                                title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
+                            ${isFavorite ? '⭐' : '☆'}
                         </button>
                     </div>
                     <div class="signal-details">
@@ -604,6 +703,10 @@
                         <button class="btn btn-success btn-sm" onclick="transmitSignal(${signal.id})">
                             📡 Transmit
                         </button>
+                        <button class="btn btn-warning btn-sm" onclick="repeatTransmitSignal(${signal.id})" 
+                                title="Repeat transmit multiple times">
+                            🔄 Repeat
+                        </button>
                         <button class="btn btn-primary btn-sm" onclick="renameSignal(${signal.id})">
                             ✏️ Rename
                         </button>
@@ -612,7 +715,7 @@
                         </button>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         }
         
         function generateSignalVisualization(signal) {
@@ -685,6 +788,29 @@
             }
         }
         
+        async function repeatTransmitSignal(id) {
+            const repeatCount = parseInt(document.getElementById('repeat-count').value) || 10;
+            
+            if (repeatCount < 1 || repeatCount > 100) {
+                showNotification('Repeat count must be between 1 and 100', 'error');
+                return;
+            }
+            
+            if (!confirm(`Transmit signal ${repeatCount} times? This may take a while.`)) return;
+            
+            try {
+                const response = await fetch('/api/repeat-transmit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `id=${id}&count=${repeatCount}`
+                });
+                const message = await response.text();
+                showNotification(message, 'success');
+            } catch (error) {
+                showNotification('Failed to repeat transmit signal', 'error');
+            }
+        }
+        
         async function deleteSignal(id) {
             if (!confirm('Are you sure you want to delete this signal?')) return;
             
@@ -721,11 +847,12 @@
         
         async function toggleFavorite(id) {
             const signal = signals.find(s => s.id === id);
+            const currentFavorite = signal.isFavorite === true || signal.isFavorite === 'true';
             try {
                 const response = await fetch('/api/signals/favorite', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `id=${id}&favorite=${!signal.isFavorite}`
+                    body: `id=${id}&favorite=${!currentFavorite}`
                 });
                 const message = await response.text();
                 showNotification(message, 'success');
