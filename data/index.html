@@ -93,6 +93,23 @@
             box-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
         }
         
+        .status-indicator.connected {
+            background: #2ecc71;
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
+        }
+        
+        .status-indicator.disconnected {
+            background: #e74c3c;
+            box-shadow: 0 0 10px rgba(231, 76, 60, 0.5);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        
         .controls {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -464,6 +481,10 @@
             <p>Capture, Store, and Replay 433MHz RF Signals</p>
             <div class="status-bar">
                 <div class="status-item">
+                    <div class="status-indicator connected" id="connection-indicator"></div>
+                    <span id="connection-status">Connected</span>
+                </div>
+                <div class="status-item">
                     <div class="status-indicator" id="sniffing-indicator"></div>
                     <span>Sniffing</span>
                 </div>
@@ -549,6 +570,9 @@
         let signals = [];
         let lastSignalCount = 0;
         let previousSignals = [];
+        let isConnected = true;
+        let connectionCheckInterval;
+        let lastSuccessfulRequest = Date.now();
         
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
@@ -556,6 +580,9 @@
             loadSignals();
             setInterval(loadStatus, 2000); // Update status every 2 seconds
             setInterval(loadSignals, 5000); // Refresh signals every 5 seconds
+            
+            // Monitor connection status
+            connectionCheckInterval = setInterval(checkConnection, 1000); // Check connection every second
             
             // Event listeners
             document.getElementById('start-sniffing').addEventListener('click', () => toggleSniffing(true));
@@ -583,6 +610,9 @@
                 const response = await fetch('/api/status');
                 const status = await response.json();
                 
+                // Update connection status
+                updateConnectionStatus(true);
+                
                 document.getElementById('sniffing-indicator').classList.toggle('active', status.sniffing);
                 document.getElementById('buzzer-indicator').classList.toggle('active', status.buzzer);
                 document.getElementById('led-indicator').classList.toggle('active', status.led);
@@ -605,6 +635,54 @@
                 document.getElementById('stop-sniffing').disabled = !status.sniffing;
             } catch (error) {
                 console.error('Failed to load status:', error);
+                updateConnectionStatus(false);
+            }
+        }
+        
+        function updateConnectionStatus(connected) {
+            const indicator = document.getElementById('connection-indicator');
+            const statusText = document.getElementById('connection-status');
+            
+            if (connected && !isConnected) {
+                // Just reconnected
+                isConnected = true;
+                indicator.className = 'status-indicator connected';
+                statusText.textContent = 'Connected';
+                showNotification('Connection restored', 'success');
+            } else if (!connected && isConnected) {
+                // Just disconnected
+                isConnected = false;
+                indicator.className = 'status-indicator disconnected';
+                statusText.textContent = 'Disconnected';
+                showNotification('Connection lost - trying to reconnect...', 'error');
+            } else if (connected) {
+                // Still connected
+                lastSuccessfulRequest = Date.now();
+                indicator.className = 'status-indicator connected';
+                statusText.textContent = 'Connected';
+            } else {
+                // Still disconnected
+                indicator.className = 'status-indicator disconnected';
+                statusText.textContent = 'Disconnected';
+            }
+        }
+        
+        async function checkConnection() {
+            // Only check if we haven't had a successful request in the last 5 seconds
+            if (Date.now() - lastSuccessfulRequest > 5000) {
+                try {
+                    const response = await fetch('/api/status', { 
+                        timeout: 3000,
+                        signal: AbortSignal.timeout(3000)
+                    });
+                    if (response.ok) {
+                        updateConnectionStatus(true);
+                    } else {
+                        updateConnectionStatus(false);
+                    }
+                } catch (error) {
+                    updateConnectionStatus(false);
+                }
             }
         }
         
@@ -613,6 +691,9 @@
                 const response = await fetch('/api/signals');
                 const data = await response.json();
                 const newSignals = data.signals || [];
+                
+                // Update connection status
+                updateConnectionStatus(true);
                 
                 // Check for signals with updated timestamps (duplicates)
                 if (signals.length > 0) {
@@ -644,6 +725,7 @@
                 renderSignals();
             } catch (error) {
                 console.error('Failed to load signals:', error);
+                updateConnectionStatus(false);
                 showNotification('Failed to load signals', 'error');
             }
         }
