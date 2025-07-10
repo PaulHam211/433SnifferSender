@@ -106,11 +106,20 @@ cd RF433SnifferSender
 3. Ensure good antenna connections for optimal RF performance
 
 ### **Step 3: Software Setup**
+
+⚠️ **IMPORTANT**: You must upload BOTH the firmware AND the web interface for the device to work properly!
+
 ```bash
-# Using PlatformIO
-pio run --target upload          # Upload firmware
-pio run --target uploadfs        # Upload web interface
+# Using PlatformIO - Run BOTH commands:
+pio run --target upload          # 1. Upload firmware to ESP32
+pio run --target uploadfs        # 2. Upload web interface files
 ```
+
+**Why both uploads are required:**
+- **Firmware Upload** (`--target upload`): Installs the main ESP32 program that handles RF communication, WiFi, and web server
+- **Web Interface Upload** (`--target uploadfs`): Installs the HTML/CSS/JavaScript files that create the user interface at `192.168.4.1`
+
+**If you skip the web interface upload**, you'll see "HTTP 500" errors when trying to access the device web page.
 
 ### **Step 4: First Boot**
 1. Power on the ESP32
@@ -225,7 +234,7 @@ const int AUTO_CLEANUP_THRESHOLD = 950;  // 95% capacity
 |---------|----------|
 | **No startup tone** | Check buzzer wiring and power connections |
 | **Can't find WiFi network** | Verify ESP32 power and check serial monitor |
-| **HTTP 500 error** | Upload filesystem: `pio run --target uploadfs` |
+| **HTTP 500 error** | Check that BOTH uploads completed: `pio run --target upload` AND `pio run --target uploadfs` |
 | **No signal capture** | Check receiver wiring (GPIO 4) and 3.3V power |
 | **Transmitter not working** | Verify transmitter wiring (GPIO 2) and 5V power |
 | **Serial monitor blank** | Check baud rate (115200) and COM port |
@@ -259,10 +268,14 @@ const int AUTO_CLEANUP_THRESHOLD = 950;  // 95% capacity
 # Prerequisites: PlatformIO installed
 git clone <repository-url>
 cd RF433SnifferSender
+
+# IMPORTANT: Upload both firmware AND web interface
 pio run                    # Compile
-pio run --target upload    # Flash firmware  
-pio run --target uploadfs  # Flash web interface
+pio run --target upload    # 1. Flash firmware to ESP32
+pio run --target uploadfs  # 2. Flash web interface files
 ```
+
+**⚠️ Critical Note**: Both upload commands are required! The firmware provides the ESP32 functionality, while uploadfs installs the web interface files that create the user interface.
 
 ### **Project Structure**
 ```
