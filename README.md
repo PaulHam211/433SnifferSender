@@ -13,7 +13,7 @@ A comprehensive ESP32-based device for capturing, storing, and replaying 433MHz 
 *Full-featured web interface optimized for desktop browsers*
 
 ### Mobile Interface  
-![Mobile Screenshot](images/mobile-screenshot.jpg)
+![Mobile Screenshot](images/mobile-screenshot.png)
 *Responsive mobile design with touch-friendly controls*
 
 ## ✨ Features
